@@ -12,9 +12,12 @@ from time import time
 
 from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 
+import requests
+from bs4 import BeautifulSoup as bs
+
 
 class WebFS(Operations):
-	def __init__(self):
+	def __init__(self, rootUrl):
 		pass
 
 	def getattr(self, path, fh=None):
@@ -28,9 +31,29 @@ class WebFS(Operations):
 		entries = ['.', '..', 'foo']
 		for e in entries:
 			yield e
+	
+class Page(object):
+	__links = {}
 
-def main(mountpoint):
-	FUSE(WebFS(), mountpoint, nothreads=True, foreground=True)
+	def __init__(self, url):
+		r = requests.get(url)
+		self.__init__(url, r.text)
+
+	def __init__(self, url, body):
+		soup = bs(body, 'html.parser')
+		for anchor in soup.find_all('a'):
+			target = anchor['href']
+			if anchor.string is not None:
+				name = anchor.string
+			else:
+				name = target
+			self.__links[name] = target
+	
+	def links(self):
+		return self.__links
+
+def main(mountpoint, rootUrl):
+	FUSE(WebFS(rootUrl), mountpoint, nothreads=True, foreground=True)
 
 if __name__=='__main__':
-	main(sys.argv[1])
+	main(sys.argv[1], sys.argv[2])

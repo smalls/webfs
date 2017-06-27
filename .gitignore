@@ -1,2 +1,3 @@
 venv-webfs/**
 *.pyc
+*.swp
