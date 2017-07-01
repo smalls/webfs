@@ -4,15 +4,24 @@
 #
 
 import unittest
-import os
+from unittest.mock import MagicMock, patch
 
-import webfs
+from webfs import Page
 
 class PageTest(unittest.TestCase):
 
     def testSimplePage(self):
-        with open('test_data/simplepage.html') as fd:
-            page = webfs.Page('http://www.foo.com', fd.read())
+        simplepage="""
+<html>
+    <body>
+        <a href="first.html"/>
+        <a href="second.gif">second name</a>
+    </body>
+</html>
+        """
+        with patch.object(Page, '_get_data', return_value=simplepage):
+            page = Page('http://www.foo.com')
+            page.method = MagicMock(return_value=3)
             self.assertEqual(2, len(page.links()))
             self.assertTrue('first.html' in page.links())
             self.assertEqual('first.html', page.links()['first.html'])

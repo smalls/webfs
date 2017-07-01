@@ -17,8 +17,10 @@ from bs4 import BeautifulSoup as bs
 
 
 class WebFS(Operations):
+	__rootPage = None
+
 	def __init__(self, rootUrl):
-		pass
+		self.__rootPage = Page(rootUrl)
 
 	def getattr(self, path, fh=None):
 		if path not in ['/', '/foo']:
@@ -34,12 +36,11 @@ class WebFS(Operations):
 	
 class Page(object):
 	__links = {}
+	__children = {}
 
 	def __init__(self, url):
-		r = requests.get(url)
-		self.__init__(url, r.text)
+		body = self._get_data(url)
 
-	def __init__(self, url, body):
 		soup = bs(body, 'html.parser')
 		for anchor in soup.find_all('a'):
 			target = anchor['href']
@@ -48,9 +49,14 @@ class Page(object):
 			else:
 				name = target
 			self.__links[name] = target
+			#self.__children[name] = Page(target)
+	
+	def _get_data(self, url):
+		return requests.get(url).text
 	
 	def links(self):
 		return self.__links
+
 
 def main(mountpoint, rootUrl):
 	FUSE(WebFS(rootUrl), mountpoint, nothreads=True, foreground=True)
