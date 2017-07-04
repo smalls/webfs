@@ -35,10 +35,17 @@ class WebFS(Operations):
 			yield e
 	
 class Page(object):
+	"""
+	Represents a webpage.
+	"""
+
 	__links = {}
-	__children = {}
+	__cached_children = {}
 
 	def __init__(self, url):
+		self.__links = {}
+		self.__cached_children = {}
+
 		body = self._get_data(url)
 
 		soup = bs(body, 'html.parser')
@@ -49,13 +56,40 @@ class Page(object):
 			else:
 				name = target
 			self.__links[name] = target
-			#self.__children[name] = Page(target)
 	
 	def _get_data(self, url):
 		return requests.get(url).text
+
+	def _create_child(self, url):
+		return Page(url)
 	
 	def links(self):
+		"""
+		Returns a list of URLs that this page links to, as Strings.
+		"""
 		return self.__links
+
+	def child(self, link):
+		"""
+		Returns the specified child Page.
+
+		:param link: the child URL to return; note that URL must be part of
+		the set returned from `links()`.
+		:returns: a Page representing the URL specified by `link`. 
+		"""
+
+		if not link in self.links():
+			raise Exception('link %s must be in set links %s' %
+					(link, self.links()))
+
+		if link in self.__cached_children:
+			return self.__cached_children[link]
+
+		page = self._create_child(link)
+		self.__cached_children[link] = page
+		return page
+
+
 
 
 def main(mountpoint, rootUrl):
