@@ -9,6 +9,7 @@ from errno import ENOENT
 from stat import S_IFDIR
 from sys import argv
 from time import time
+import logging
 
 from fuse import FUSE, FuseOSError, Operations, LoggingMixIn
 
@@ -17,20 +18,30 @@ from bs4 import BeautifulSoup as bs
 
 
 class WebFS(Operations):
-	__rootPage = None
+	__page = None
 
-	def __init__(self, rootUrl):
-		self.__rootPage = Page(rootUrl)
+	def __init__(self, rootUrl, relative=None):
+		self.__page = Page(rootUrl)
 
 	def getattr(self, path, fh=None):
-		if path not in ['/', '/foo']:
+		print('getattr(%s)' % path)
+
+		relative = path[1:]
+		inlist = relative in self.__page.links()
+		if inlist:
+			return dict(st_mode=(S_IFDIR | 0o755), st_ctime=time(),
+								   st_mtime=time(), st_atime=time(), st_nlink=2)
+
+		if path not in ['/']: # or not inlist:
 			raise FuseOSError(ENOENT)
 
 		return dict(st_mode=(S_IFDIR | 0o755), st_ctime=time(),
 							   st_mtime=time(), st_atime=time(), st_nlink=2)
 
 	def readdir(self, path, fh):
-		entries = ['.', '..', 'foo']
+		print('readdir(%s)' % path)
+		entries = ['.', '..']
+		entries.extend(self.__page.links().keys())
 		for e in entries:
 			yield e
 	
@@ -56,6 +67,9 @@ class Page(object):
 			else:
 				name = target
 			self.__links[name] = target
+
+		# XXX
+		print('loaded url %s with links %s' % (url, self.__links.keys()))
 	
 	def _get_data(self, url):
 		return requests.get(url).text
@@ -68,16 +82,16 @@ class Page(object):
 		Returns a list of URLs that this page links to, as Strings.
 		"""
 		return self.__links
-
+	
 	def child(self, link):
 		"""
 		Returns the specified child Page.
-
+		
 		:param link: the child URL to return; note that URL must be part of
 		the set returned from `links()`.
 		:returns: a Page representing the URL specified by `link`. 
 		"""
-
+		
 		if not link in self.links():
 			raise Exception('link %s must be in set links %s' %
 					(link, self.links()))
@@ -89,10 +103,8 @@ class Page(object):
 		self.__cached_children[link] = page
 		return page
 
-
-
-
-def main(mountpoint, rootUrl):
+def main(rootUrl, mountpoint):
+	# XXX logging.basicConfig(level=logging.DEBUG)
 	FUSE(WebFS(rootUrl), mountpoint, nothreads=True, foreground=True)
 
 if __name__=='__main__':
