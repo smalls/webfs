@@ -22,13 +22,29 @@ class WebFS(Operations):
 
 	def __init__(self, rootUrl, relative=None):
 		self.__page = Page(rootUrl)
+	
+	def __get_page(self, path):
+		""" Split the path into entries, and use those names to recurse
+		along the list of pages. """
+
+		if path == '/':
+			return self.__page
+
+		entries = path.split('/')[1:]
+		print('elements: %s from path %s' % (entries, path))
+
+		if not entries:
+			return self.__page
+		else:
+			return self.__page.recurse(entries)
+
 
 	def getattr(self, path, fh=None):
-		print('getattr(%s)' % path)
 
-		relative = path[1:]
-		inlist = relative in self.__page.links()
-		if inlist:
+		page = self.__get_page(path)
+		print('getattr(%s), page: %s' % (path, page))
+
+		if page:
 			return dict(st_mode=(S_IFDIR | 0o755), st_ctime=time(),
 								   st_mtime=time(), st_atime=time(), st_nlink=2)
 
@@ -40,8 +56,10 @@ class WebFS(Operations):
 
 	def readdir(self, path, fh):
 		print('readdir(%s)' % path)
+		page = self.__get_page(path)
+
 		entries = ['.', '..']
-		entries.extend(self.__page.links().keys())
+		entries.extend(page.child_names())
 		for e in entries:
 			yield e
 	
@@ -50,11 +68,13 @@ class Page(object):
 	Represents a webpage.
 	"""
 
-	__links = {}
+	__urls_by_name = {}
 	__cached_children = {}
+	__url = None
 
 	def __init__(self, url):
-		self.__links = {}
+		self.__url = url
+		self.__urls_by_name = {}
 		self.__cached_children = {}
 
 		body = self._get_data(url)
@@ -66,10 +86,7 @@ class Page(object):
 				name = anchor.string
 			else:
 				name = target
-			self.__links[name] = target
-
-		# XXX
-		print('loaded url %s with links %s' % (url, self.__links.keys()))
+			self.__urls_by_name[name] = target
 	
 	def _get_data(self, url):
 		return requests.get(url).text
@@ -77,31 +94,32 @@ class Page(object):
 	def _create_child(self, url):
 		return Page(url)
 	
-	def links(self):
+	def child_names(self):
 		"""
-		Returns a list of URLs that this page links to, as Strings.
+		Returns a list of valid children of this page (the names which can be
+		iterated down).
 		"""
-		return self.__links
+		return self.__urls_by_name.keys()
 	
-	def child(self, link):
-		"""
-		Returns the specified child Page.
-		
-		:param link: the child URL to return; note that URL must be part of
-		the set returned from `links()`.
-		:returns: a Page representing the URL specified by `link`. 
-		"""
-		
-		if not link in self.links():
-			raise Exception('link %s must be in set links %s' %
-					(link, self.links()))
+	def recurse(self, linknames):
+		"""Returns the page specified by the list of link names (`linknames`)."""
+		name = linknames[0]
+		linknames = linknames[1:]
+		print ('recurse name %s linknames %s' % (name, linknames))
 
-		if link in self.__cached_children:
-			return self.__cached_children[link]
+		if name not in self.__urls_by_name:
+			return None
 
-		page = self._create_child(link)
-		self.__cached_children[link] = page
-		return page
+		if name in self.__cached_children:
+			page = self.__cached_children[name]
+		else:
+			page = self._create_child(self.__urls_by_name[name])
+			self.__cached_children[name] = page
+
+		if not linknames:
+			return page
+		else:
+			return page.recurse(linknames)
 
 def main(rootUrl, mountpoint):
 	# XXX logging.basicConfig(level=logging.DEBUG)
